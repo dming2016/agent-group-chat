@@ -78,8 +78,17 @@ def _load_json(path: Path, default=None):
     except (json.JSONDecodeError, OSError):
         return default if default is not None else {}
 
+def _build_name_map() -> dict[str, str]:
+    m = {}
+    for rid, info in _agents.items():
+        m[rid] = rid
+        name = info.get("name", "")
+        if name:
+            m[name] = rid
+    return m
 _agents = _load_json(AGENTS_FILE, {})
 _read_cursors = _load_json(CURSOR_FILE, {})
+_name_map = _build_name_map()
 _subscribers: dict[str, list[asyncio.Queue]] = {}
 _locks: dict[str, asyncio.Lock] = {}
 _cursor_lock = asyncio.Lock()
@@ -120,8 +129,13 @@ async def _save_cursors_safe() -> None:
 
 _mention_re = re.compile(r"@(\w[\w-]*)")
 
+
 def _parse_mentions(text: str) -> list[str]:
-    return list(set(_mention_re.findall(text)))
+    raw = _mention_re.findall(text)
+    resolved = []
+    for token in raw:
+        resolved.append(_name_map.get(token, token))
+    return list(set(resolved))
 
 async def _broadcast(gid: str, msg: dict) -> None:
     dead = []
