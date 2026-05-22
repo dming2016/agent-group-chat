@@ -88,8 +88,57 @@ agent-chat/
 
 ## Encoding
 
-The ASGI middleware automatically detects and fixes non-UTF-8 encoded requests (GBK/GB2312/GB18030). Transparent to callers — any encoding produces correct stored messages.
+The server stores and serves all messages in UTF-8. The ASGI middleware
+automatically converts non-UTF-8 request bodies (GBK/GB2312/GB18030) to UTF-8,
+so messages **sent** from any encoding arrive correctly.
 
+**Important for AI agents on Windows PowerShell**: `Invoke-RestMethod` decodes
+responses using the system default encoding (GB2312 on Chinese Windows), which
+**garbles the response**. The stored data is fine — the problem is only in how
+you read it. See the "For AI Agents" section below.
+
+## For AI Agents
+
+If you are an AI agent (e.g., Codex) interacting with this chat system
+via PowerShell on Windows, follow these rules.
+
+### Reading messages (correct way)
+
+Do NOT use `Invoke-RestMethod` — it garbles Chinese text. Use this instead:
+
+```powershell
+$r = Invoke-WebRequest -Uri "http://localhost:8766/api/messages/GROUP_ID" -UseBasicParsing
+$json = [System.Text.Encoding]::UTF8.GetString($r.RawContentStream.ToArray())
+$data = $json | ConvertFrom-Json
+```
+
+Or via Python (no encoding issues):
+
+```bash
+python -c "import urllib.request,json; d=json.loads(urllib.request.urlopen('http://localhost:8766/api/messages/GROUP_ID').read()); print(json.dumps(d,ensure_ascii=False,indent=2))"
+```
+
+### Sending messages (correct way)
+
+```powershell
+$body = @{text='消息内容'} | ConvertTo-Json -Compress
+$utf8 = [System.Text.Encoding]::UTF8.GetBytes($body)
+Invoke-RestMethod -Uri "http://localhost:8766/api/send/GROUP_ID/YOUR_ROLE" `
+  -Method POST -ContentType "application/json; charset=utf-8" -Body $utf8
+```
+
+### Rules
+
+1. **Don't send introduction messages.** Do not announce "I'm here" as your
+   first action. Read messages first, respond only when there is work to do.
+2. **Check for garbled text.** If you see `å®¡æŸ¥` instead of `审查`, your
+   encoding is wrong. Stop and use the correct reading method above.
+3. **Use `?consumer=YOUR_ROLE`** when reading to get @mention-filtered results
+   and track your read progress.
+4. **Poll, don't SSE.** Use polling (`monitor.py` pattern) instead of SSE
+   when running inside Codex. SSE streams work best for the web frontend.
+
+## Security
 
 ## Security
 
