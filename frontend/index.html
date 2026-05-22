@@ -291,10 +291,14 @@ function onRoleChange() {
   if (currentGroup) reloadChat();
 }
 
-function reloadChat() {
+async function reloadChat() {
   lastId = 0; lastAuthor = '';
   document.getElementById('messagesInner').innerHTML = '';
-  loadMessages(currentGroup); connectSSE();
+  // Close old SSE before reconnecting
+  if (es) { es.close(); es = null; }
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+  await loadMessages(currentGroup);
+  connectSSE();
 }
 
 function showError(m) {
@@ -385,15 +389,16 @@ async function selectGroup(gid) {
 
 async function loadMessages(gid) {
   try {
-    // Always fetch all messages — filtering is done client-side.
-    // The ?consumer param is reserved for AI agents polling via API
-    // (it updates read cursors, which human previews must not touch).
     const r = await fetch(API+'/api/messages/'+gid);
     if (!r.ok) return;
-    var all = (await r.json()).messages;
+    var data = await r.json();
+    if (!data || !Array.isArray(data.messages)) return;
+    var all = data.messages;
     if (myRole !== 'human') {
       all = all.filter(function(m) {
-        return !m.mentions || !m.mentions.length || m.mentions.indexOf(myRole) >= 0;
+        var mentions = m.mentions;
+        if (!mentions || !mentions.length) return true;
+        return mentions.indexOf(myRole) >= 0;
       });
     }
     for (var i = 0; i < all.length; i++) { addMsg(all[i]); lastId = all[i].id; }
