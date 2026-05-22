@@ -66,7 +66,7 @@ body { background:var(--bg); color:var(--text); font-family:"Segoe UI","Microsof
 .empty-state .icon { font-size:36px; margin-bottom:8px; opacity:.2; }
 
 .msg-group { padding:0 16px; display:flex; gap:10px; margin-top:12px; }
-.msg-group.compact { margin-top:2px; }
+.msg-group.compact { margin-top:2px; } .msg-group.compact .msg-bubble { margin-top:3px; border-radius:8px; }
 .msg-group.compact .msg-avatar-wrap { visibility:hidden; }
 .msg-group.compact .msg-author { display:none; }
 .msg-avatar-wrap { flex-shrink:0; width:34px; padding-top:1px; }
@@ -416,7 +416,7 @@ function addMsg(m) {
     var grp = el('div', 'msg-group ' + (isSelf ? 'msg-self' : 'msg-other'));
 
     var aw = el('div', 'msg-avatar-wrap');
-    var av = el('div', 'msg-avatar avatar-' + (m.role||'system'), m.avatar || (m.from||'?')[0]);
+    var avText = (agents[m.role] && agents[m.role].avatar) || m.avatar || (m.from||'?')[0]; var av = el('div', 'msg-avatar avatar-' + (m.role||'system'), avText);
     aw.appendChild(av); grp.appendChild(aw);
 
     var content = el('div', 'msg-content');
@@ -455,6 +455,14 @@ function addMsg(m) {
     last.classList.add('compact');
     var bubble = el('div', 'msg-bubble', m.text);
     last.querySelector('.msg-content').appendChild(bubble);
+    if (m.mentions && m.mentions.length) {
+      var tags = el('div', 'msg-mentions');
+      m.mentions.forEach(function(id) {
+        var t = el('span', 'tag', '@' + (agents[id] ? agents[id].name : id));
+        tags.appendChild(t);
+      });
+      last.querySelector('.msg-content').appendChild(tags);
+    }
   }
 }
 
