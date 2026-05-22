@@ -385,10 +385,18 @@ async function selectGroup(gid) {
 
 async function loadMessages(gid) {
   try {
-    const consumer = (myRole !== 'human') ? myRole : '';
-    const url = API+'/api/messages/'+gid + (consumer ? '?consumer='+consumer : '');
-    const r = await fetch(url); if (!r.ok) return;
-    for (const m of (await r.json()).messages) { addMsg(m); lastId = m.id; }
+    // Always fetch all messages — filtering is done client-side.
+    // The ?consumer param is reserved for AI agents polling via API
+    // (it updates read cursors, which human previews must not touch).
+    const r = await fetch(API+'/api/messages/'+gid);
+    if (!r.ok) return;
+    var all = (await r.json()).messages;
+    if (myRole !== 'human') {
+      all = all.filter(function(m) {
+        return !m.mentions || !m.mentions.length || m.mentions.indexOf(myRole) >= 0;
+      });
+    }
+    for (var i = 0; i < all.length; i++) { addMsg(all[i]); lastId = all[i].id; }
     scrollBottom();
   } catch(e) { showError('加载失败'); }
 }
@@ -512,11 +520,14 @@ function connectSSE() {
 
 async function fillGap(fromId, toId) {
   try {
-    var consumer = (myRole !== 'human') ? myRole : '';
     var url = API+'/api/messages/'+currentGroup+'?since='+(fromId-1);
-    if (consumer) url += '&consumer='+consumer;
     var r = await fetch(url); if (!r.ok) return;
     var msgs = (await r.json()).messages;
+    if (myRole !== 'human') {
+      msgs = msgs.filter(function(m) {
+        return !m.mentions || !m.mentions.length || m.mentions.indexOf(myRole) >= 0;
+      });
+    }
     for (var i = 0; i < msgs.length; i++) { if (msgs[i].id > lastId) { addMsg(msgs[i]); lastId = msgs[i].id; } }
   } catch(e) {}
 }
