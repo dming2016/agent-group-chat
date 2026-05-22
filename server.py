@@ -352,12 +352,25 @@ async def get_msgs(group_id: str, since: int = 0, role: str = "", consumer: str 
 async def group_members(group_id: str) -> dict:
     ms = _load(group_id)
     seen: dict[str, dict] = {}
+    # Agents who have sent messages
     for m in ms:
         role = m.get("role", "")
         if role in _agents and role not in seen:
             seen[role] = {"name": _agents[role]["name"], "role": role,
-                          "avatar": _agents[role]["avatar"], "last_seen": m["time"]}
-    return {"members": list(seen.values())}
+                          "avatar": _agents[role]["avatar"], "last_seen": m["time"],
+                          "active": True}
+    # Agents who have polled (read cursor exists for this group)
+    prefix = group_id + ":"
+    for key in _read_cursors:
+        if key.startswith(prefix):
+            role = key[len(prefix):]
+            if role in _agents and role not in seen:
+                seen[role] = {"name": _agents[role]["name"], "role": role,
+                              "avatar": _agents[role]["avatar"], "last_seen": None,
+                              "active": False}
+    # Sort: active members first, then by last_seen
+    result = sorted(seen.values(), key=lambda x: (0 if x.get("active") else 1, x.get("last_seen") or ""), reverse=False)
+    return {"members": result}
 
 # ═══════════════════════════════════════════════
 #  Routes: SSE

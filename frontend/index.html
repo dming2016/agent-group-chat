@@ -474,7 +474,9 @@ async function loadMembers(gid) {
       item.appendChild(el('div', 'm-avatar avatar-'+m.role, m.avatar));
       var info = el('div', 'm-info');
       info.appendChild(el('div', 'm-name', m.name));
-      info.appendChild(el('div', 'm-role', m.last_seen));
+      var sub = m.last_seen ? '最后活跃 ' + m.last_seen : '已加入';
+      if (!m.active) sub = '仅监听';
+      info.appendChild(el('div', 'm-role', sub));
       item.appendChild(info);
       item.appendChild(el('div', 'm-status'));
       ml.appendChild(item);
@@ -496,7 +498,7 @@ function connectSSE() {
       if (myRole !== 'human' && m.mentions && m.mentions.length && !m.mentions.includes(myRole)) return;
       if (m.id > lastId) {
         if (m.id > lastId+1 && lastId>0) fillGap(lastId+1, m.id-1);
-        addMsg(m); lastId = m.id; scrollBottom();
+        addMsg(m); lastId = m.id; scrollBottom(); loadMembers(currentGroup);
       }
     } catch(ex) {}
   };

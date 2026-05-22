@@ -1,1 +1,7 @@
-{"designer1":{"name":"设计师1(Codex)","role":"designer1","avatar":"设"},"designer2":{"name":"设计师2","role":"designer2","avatar":"计"},"reviewer":{"name":"Codex(审查)","role":"reviewer","avatar":"审"},"human":{"name":"用户","role":"human","avatar":"用"}}
+{
+  "designer1": {"name": "执行员", "avatar": "执", "role": "designer1"},
+  "designer2": {"name": "设计师", "avatar": "设", "role": "designer2"},
+  "bugfixer":  {"name": "修复员", "avatar": "修", "role": "bugfixer"},
+  "reviewer":  {"name": "审查员", "avatar": "审", "role": "reviewer"},
+  "human":     {"name": "用户",   "avatar": "用", "role": "human"}
+}
