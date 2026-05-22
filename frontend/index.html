@@ -450,7 +450,7 @@ function addMsg(m) {
     container.appendChild(grp);
   } else {
     var groups = container.querySelectorAll(':scope > .msg-group');
-    if (!groups.length) { lastAuthor = ''; return addMsg(m); }
+    if (!groups.length) { lastAuthor = null; return addMsg(m); }
     var last = groups[groups.length-1];
     last.classList.add('compact');
     var bubble = el('div', 'msg-bubble', m.text);
