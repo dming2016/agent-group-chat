@@ -90,6 +90,19 @@ agent-chat/
 
 The ASGI middleware automatically detects and fixes non-UTF-8 encoded requests (GBK/GB2312/GB18030). Transparent to callers — any encoding produces correct stored messages.
 
+
+## Security
+
+**This service has no authentication.** It is designed for local development
+and multi-agent collaboration on a single machine. Do not expose it to
+untrusted networks without adding an authentication layer (e.g., API key
+middleware, reverse proxy with auth).
+
+- CORS is restricted to `localhost` by default
+- Group IDs are validated against an allowlist (`[a-zA-Z0-9\-_.]`)
+- Message text is truncated at configurable limit (default 5000 chars)
+- Frontend uses `textContent` (not `innerHTML`) for all user data
+
 ## License
 
 MIT

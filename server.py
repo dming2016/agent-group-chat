@@ -1,4 +1,4 @@
-﻿import json, asyncio, time, re, os, tempfile
+﻿import json, asyncio, time, re, os
 from pathlib import Path
 from datetime import datetime
 from fastapi import FastAPI, Request, HTTPException
@@ -65,7 +65,7 @@ class CharsetFixASGI:
 _raw_app = FastAPI(title="AgentGroupChat")
 _raw_app.add_middleware(
     CORSMiddleware,
-    allow_origins=[f"http://localhost:{PORT}", f"http://127.0.0.1:{PORT}", "http://localhost:*"],
+    allow_origins=[f"http://localhost:{PORT}", f"http://127.0.0.1:{PORT}"],
     allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["*"],
 )
@@ -182,7 +182,7 @@ async def startup():
 # ═══════════════════════════════════════════════
 
 @_raw_app.get("/api/health")
-async def health():
+async def health() -> dict:
     json_files = [f for f in MSG_DIR.glob("*.json") if not f.name.startswith("_")]
     return {"status": "ok", "groups": len(json_files), "agents": len(_agents)}
 
@@ -191,7 +191,7 @@ async def health():
 # ═══════════════════════════════════════════════
 
 @_raw_app.get("/api/agents")
-async def get_agents():
+async def get_agents() -> dict:
     return {"agents": _agents}
 
 # ═══════════════════════════════════════════════
@@ -212,19 +212,19 @@ def _group_meta(f: Path) -> dict:
     }
 
 @_raw_app.get("/api/groups")
-async def groups():
+async def groups() -> dict:
     gs = [_group_meta(f) for f in sorted(MSG_DIR.glob("*.json")) if not f.name.startswith("_")]
     return {"groups": gs}
 
 @_raw_app.post("/api/groups")
-async def create_group(body: CreateGroup):
+async def create_group(body: CreateGroup) -> dict:
     if _f(body.group_id).exists():
         raise HTTPException(409, "group exists")
     _save(body.group_id, [])
     return {"group_id": body.group_id, "name": body.name or body.group_id}
 
 @_raw_app.delete("/api/groups/{group_id}")
-async def delete_group(group_id: str):
+async def delete_group(group_id: str) -> dict:
     f = _f(group_id)
     if not f.exists():
         raise HTTPException(404, "group not found")
@@ -243,7 +243,7 @@ async def delete_group(group_id: str):
 # ═══════════════════════════════════════════════
 
 @_raw_app.post("/api/send/{group_id}/{agent_id}")
-async def send_as_agent(group_id: str, agent_id: str, body: SendMsg):
+async def send_as_agent(group_id: str, agent_id: str, body: SendMsg) -> dict:
     agent = _agents.get(agent_id)
     if not agent:
         raise HTTPException(400, f"unknown agent: {agent_id}")
@@ -274,7 +274,7 @@ async def send_as_agent(group_id: str, agent_id: str, body: SendMsg):
     return resp
 
 @_raw_app.post("/api/send/{group_id}")
-async def send_msg(group_id: str, body: SendMsg):
+async def send_msg(group_id: str, body: SendMsg) -> dict:
     text = body.text
     truncated = len(text) > MAX_TEXT
     if truncated:
@@ -307,7 +307,7 @@ async def send_msg(group_id: str, body: SendMsg):
 # ═══════════════════════════════════════════════
 
 @_raw_app.get("/api/messages/{group_id}")
-async def get_msgs(group_id: str, since: int = 0, role: str = "", consumer: str = ""):
+async def get_msgs(group_id: str, since: int = 0, role: str = "", consumer: str = "") -> dict:
     ms = _load(group_id)
     cid = consumer or role
     if cid and cid in _agents:
@@ -328,7 +328,7 @@ async def get_msgs(group_id: str, since: int = 0, role: str = "", consumer: str 
 # ═══════════════════════════════════════════════
 
 @_raw_app.get("/api/groups/{group_id}/members")
-async def group_members(group_id: str):
+async def group_members(group_id: str) -> dict:
     ms = _load(group_id)
     seen: dict[str, dict] = {}
     for m in ms:
