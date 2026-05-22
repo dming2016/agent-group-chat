@@ -134,7 +134,9 @@ def _parse_mentions(text: str) -> list[str]:
     raw = _mention_re.findall(text)
     resolved = []
     for token in raw:
-        resolved.append(_name_map.get(token, token))
+        rid = _name_map.get(token)
+        if rid:
+            resolved.append(rid)
     return list(set(resolved))
 
 async def _broadcast(gid: str, msg: dict) -> None:
