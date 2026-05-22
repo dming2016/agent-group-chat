@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+*.pyo
+messages/*.json
+_cursors.json
+.env
+.venv/
