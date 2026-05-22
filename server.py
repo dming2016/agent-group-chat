@@ -1,4 +1,5 @@
 ﻿import json, asyncio, time, re, os
+from contextlib import asynccontextmanager
 from pathlib import Path
 from datetime import datetime
 from fastapi import FastAPI, Request, HTTPException
@@ -7,13 +8,19 @@ from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel
 
 # ═══════════════════════════════════════════════
-#  Config (env-overridable)
+#  Config (env-overridable, with safe parsing)
 # ═══════════════════════════════════════════════
 
+def _env_int(key: str, default: int) -> int:
+    try:
+        return int(os.environ.get(key, str(default)))
+    except ValueError:
+        return default
+
 HOST = os.environ.get("AGENTCHAT_HOST", "0.0.0.0")
-PORT = int(os.environ.get("AGENTCHAT_PORT", "8766"))
-MAX_MSGS = int(os.environ.get("AGENTCHAT_MAX_MSGS", "200"))
-MAX_TEXT = int(os.environ.get("AGENTCHAT_MAX_TEXT", "5000"))
+PORT = _env_int("AGENTCHAT_PORT", 8766)
+MAX_MSGS = _env_int("AGENTCHAT_MAX_MSGS", 200)
+MAX_TEXT = _env_int("AGENTCHAT_MAX_TEXT", 5000)
 MSG_DIR = Path(os.environ.get("AGENTCHAT_DATA_DIR", Path(__file__).parent / "messages"))
 AGENTS_FILE = Path(os.environ.get("AGENTCHAT_AGENTS_FILE", Path(__file__).parent / "agents.json"))
 
@@ -59,23 +66,11 @@ class CharsetFixASGI:
         return await self.app(scope, fixed_receive, send)
 
 # ═══════════════════════════════════════════════
-#  App setup
+#  State
 # ═══════════════════════════════════════════════
-
-_raw_app = FastAPI(title="AgentGroupChat")
-_raw_app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[f"http://localhost:{PORT}", f"http://127.0.0.1:{PORT}"],
-    allow_methods=["GET", "POST", "DELETE"],
-    allow_headers=["*"],
-)
 
 MSG_DIR.mkdir(parents=True, exist_ok=True)
 CURSOR_FILE = MSG_DIR / "_cursors.json"
-
-# ═══════════════════════════════════════════════
-#  State
-# ═══════════════════════════════════════════════
 
 def _load_json(path: Path, default=None):
     try:
@@ -101,7 +96,12 @@ def _f(gid: str) -> Path:
 
 def _load(gid: str) -> list[dict]:
     f = _f(gid)
-    return json.loads(f.read_text("utf-8")) if f.exists() else []
+    if not f.exists():
+        return []
+    try:
+        return json.loads(f.read_text("utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return []
 
 def _save(gid: str, msgs: list[dict]) -> None:
     tmp = _f(gid).with_suffix(".tmp")
@@ -109,7 +109,7 @@ def _save(gid: str, msgs: list[dict]) -> None:
     os.replace(tmp, _f(gid))
 
 def _get_lock(gid: str) -> asyncio.Lock:
-    """Thread-safe lock acquisition: check-then-set to avoid setdefault race."""
+    """Acquire per-group lock. Safe in asyncio (no await between check and set)."""
     if gid not in _locks:
         _locks[gid] = asyncio.Lock()
     return _locks[gid]
@@ -151,34 +151,55 @@ class CreateGroup(BaseModel):
     name: str = ""
 
 # ═══════════════════════════════════════════════
-#  SSE heartbeat cleanup (runs every 60s)
+#  SSE heartbeat cleanup
 # ═══════════════════════════════════════════════
 
 async def _heartbeat_cleanup():
-    """Periodically purge dead subscriber queues."""
+    """Periodically probe and purge dead subscriber queues."""
     while True:
         await asyncio.sleep(60)
         for gid, queues in list(_subscribers.items()):
             alive = []
             for q in queues:
                 try:
-                    q.put_nowait(None)  # test write
-                    # If we get here, the queue accepted it; drain the None
+                    q.put_nowait(None)
                     try:
                         q.get_nowait()
                     except asyncio.QueueEmpty:
                         pass
                     alive.append(q)
                 except asyncio.QueueFull:
-                    alive.append(q)  # full but alive
+                    alive.append(q)
             _subscribers[gid] = alive
 
-@_raw_app.on_event("startup")
-async def startup():
+# ═══════════════════════════════════════════════
+#  Lifespan (replaces deprecated on_event)
+# ═══════════════════════════════════════════════
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    """Startup: launch heartbeat. Shutdown: save cursors."""
     asyncio.create_task(_heartbeat_cleanup())
+    yield
+    try:
+        CURSOR_FILE.write_text(json.dumps(_read_cursors, ensure_ascii=False), "utf-8")
+    except Exception:
+        pass
 
 # ═══════════════════════════════════════════════
-#  Health
+#  App setup
+# ═══════════════════════════════════════════════
+
+_raw_app = FastAPI(title="AgentGroupChat", lifespan=_lifespan)
+_raw_app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[f"http://localhost:{PORT}", f"http://127.0.0.1:{PORT}"],
+    allow_methods=["GET", "POST", "DELETE"],
+    allow_headers=["*"],
+)
+
+# ═══════════════════════════════════════════════
+#  Routes: Health
 # ═══════════════════════════════════════════════
 
 @_raw_app.get("/api/health")
@@ -187,7 +208,7 @@ async def health() -> dict:
     return {"status": "ok", "groups": len(json_files), "agents": len(_agents)}
 
 # ═══════════════════════════════════════════════
-#  Agents
+#  Routes: Agents
 # ═══════════════════════════════════════════════
 
 @_raw_app.get("/api/agents")
@@ -195,7 +216,7 @@ async def get_agents() -> dict:
     return {"agents": _agents}
 
 # ═══════════════════════════════════════════════
-#  Groups
+#  Routes: Groups
 # ═══════════════════════════════════════════════
 
 def _group_meta(f: Path) -> dict:
@@ -239,7 +260,7 @@ async def delete_group(group_id: str) -> dict:
     return {"deleted": group_id}
 
 # ═══════════════════════════════════════════════
-#  Send
+#  Routes: Send
 # ═══════════════════════════════════════════════
 
 @_raw_app.post("/api/send/{group_id}/{agent_id}")
@@ -303,7 +324,7 @@ async def send_msg(group_id: str, body: SendMsg) -> dict:
     return resp
 
 # ═══════════════════════════════════════════════
-#  Messages
+#  Routes: Messages
 # ═══════════════════════════════════════════════
 
 @_raw_app.get("/api/messages/{group_id}")
@@ -324,7 +345,7 @@ async def get_msgs(group_id: str, since: int = 0, role: str = "", consumer: str 
     return {"messages": ms}
 
 # ═══════════════════════════════════════════════
-#  Members
+#  Routes: Members
 # ═══════════════════════════════════════════════
 
 @_raw_app.get("/api/groups/{group_id}/members")
@@ -339,7 +360,7 @@ async def group_members(group_id: str) -> dict:
     return {"members": list(seen.values())}
 
 # ═══════════════════════════════════════════════
-#  SSE
+#  Routes: SSE
 # ═══════════════════════════════════════════════
 
 @_raw_app.get("/api/stream/{group_id}")
@@ -354,7 +375,7 @@ async def stream(group_id: str, request: Request):
                 try:
                     msg = await asyncio.wait_for(q.get(), timeout=30)
                     if msg is None:
-                        continue  # heartbeat probe
+                        continue
                     yield f"data: {json.dumps(msg, ensure_ascii=False)}\n\n"
                 except asyncio.TimeoutError:
                     yield ":\n\n"
@@ -369,18 +390,6 @@ async def index():
     return FileResponse(Path(__file__).parent / "frontend" / "index.html")
 
 app = CharsetFixASGI(_raw_app)
-
-# ═══════════════════════════════════════════════
-#  Graceful shutdown (delegated to uvicorn)
-# ═══════════════════════════════════════════════
-
-@_raw_app.on_event("shutdown")
-async def shutdown():
-    """Save state on graceful shutdown. Uvicorn handles SIGINT/SIGTERM."""
-    try:
-        CURSOR_FILE.write_text(json.dumps(_read_cursors, ensure_ascii=False), "utf-8")
-    except Exception:
-        pass
 
 if __name__ == "__main__":
     import uvicorn
