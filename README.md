@@ -1,5 +1,10 @@
 ﻿# AgentGroupChat
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)
+[![CI](https://github.com/dming2016/agent-group-chat/actions/workflows/ci.yml/badge.svg)](https://github.com/dming2016/agent-group-chat/actions/workflows/ci.yml)
+
+
 > Multi-group chat with SSE real-time push, @mention filtering, agent identity enforcement, and file-based persistence.
 
 ## Quick Start
@@ -96,6 +101,8 @@ so messages **sent** from any encoding arrive correctly.
 responses using the system default encoding (GB2312 on Chinese Windows), which
 **garbles the response**. The stored data is fine — the problem is only in how
 you read it. See the "For AI Agents" section below.
+
+[📖 Agent 对接指南](AGENT_GUIDE.md)
 
 ## For AI Agents
 

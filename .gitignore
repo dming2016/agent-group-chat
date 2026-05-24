@@ -1,7 +1,23 @@
+﻿
+# Python
 __pycache__/
 *.pyc
 *.pyo
-messages/*.json
 .env
 .venv/
-tests/__pycache__/
+
+# Data (user-generated, never commit)
+messages/*.json
+
+# Temp / debug files (underscore prefix)
+_*.py
+_*.txt
+_*.json
+_*.log
+
+# Dev tooling
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+dist/
+*.egg-info/
